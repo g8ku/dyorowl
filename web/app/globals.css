@@ -1,0 +1,299 @@
+/* DYOR Owl: one night-sky world, owl-eye amber as the only accent, red reserved for rug stamps. */
+:root {
+  --night: #0c0f2e;
+  --night-2: #161a47;
+  --night-3: #232866;
+  --moon: #f3eedd;
+  --muted: #b9bde6;
+  --amber: #ffb330;
+  --rug: #ff5a4e;
+  --paper: #f6ecd2;
+  --ink: #0b0b18;
+
+  --f-display: "Dela Gothic One", "Arial Black", Impact, sans-serif;
+  --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --gutter: max(20px, env(safe-area-inset-left, 0px));
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--moon);
+  font-family: var(--f-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+a:focus-visible {
+  outline: 3px solid var(--amber);
+  outline-offset: 3px;
+}
+
+/* ---------- hero ---------- */
+.hero {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(1.5px 1.5px at 12% 18%, var(--moon) 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 44%, var(--moon) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 41% 12%, var(--moon) 50%, transparent 51%),
+    radial-gradient(1px 1px at 63% 30%, var(--moon) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 74% 8%, var(--moon) 50%, transparent 51%),
+    radial-gradient(1px 1px at 88% 52%, var(--moon) 50%, transparent 51%),
+    radial-gradient(1px 1px at 7% 78%, var(--moon) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 55% 88%, var(--moon) 50%, transparent 51%),
+    var(--night);
+}
+
+.sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.moon {
+  position: absolute;
+  right: 7%;
+  top: 7%;
+  width: clamp(60px, 9vw, 120px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: inset -22px 10px 0 0 var(--moon);
+  transform: rotate(-20deg);
+  opacity: 0.9;
+}
+
+.stamp {
+  position: absolute;
+  font-family: var(--f-display);
+  font-size: clamp(14px, 1.8vw, 24px);
+  color: var(--rug);
+  border: 3px solid var(--rug);
+  border-radius: 6px;
+  padding: 0.15em 0.6em;
+  opacity: 0.32;
+  white-space: nowrap;
+}
+
+.hero-inner {
+  position: relative;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-block: clamp(56px, 10vw, 120px) clamp(40px, 6vw, 72px);
+  padding-left: var(--gutter);
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+  align-items: end;
+  gap: clamp(24px, 5vw, 64px);
+}
+
+.hero-copy {
+  display: grid;
+  gap: 18px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+h1 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: clamp(48px, 8.4vw, 104px);
+  line-height: 1;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+}
+
+.lede {
+  margin: 0;
+  max-width: 34ch;
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.soon {
+  margin: 4px 0 0;
+  font-family: var(--f-display);
+  font-size: clamp(24px, 3vw, 32px);
+  color: var(--amber);
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--amber);
+  color: var(--night);
+  font-weight: 800;
+  font-size: 16px;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.cta:hover {
+  background: var(--moon);
+  transform: translateY(-1px);
+}
+
+.hero-owl {
+  width: 100%;
+  max-width: 380px;
+  justify-self: end;
+  height: auto;
+}
+
+/* blinking eyelids and a slow look-around */
+.owl-lids rect {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+  transform: scaleY(0);
+  animation: blink 4.2s 1.4s infinite;
+}
+.owl-pupils {
+  animation: look 7s ease-in-out 1s infinite;
+}
+@keyframes blink {
+  0%, 92%, 100% { transform: scaleY(0); }
+  95% { transform: scaleY(1); }
+}
+@keyframes look {
+  0%, 25% { transform: translate(0, 0); }
+  35%, 55% { transform: translate(-4px, 1px); }
+  65%, 85% { transform: translate(4px, 1px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ---------- exhibits ---------- */
+.files {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-block: clamp(48px, 8vw, 96px);
+  padding-left: var(--gutter);
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 28px;
+}
+
+.files h2 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: clamp(26px, 3.4vw, 38px);
+  text-wrap: balance;
+}
+
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+/* Styled like manila case folders: paper, a tab, ink text. */
+.file {
+  position: relative;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 4px 12px 12px 12px;
+  padding: 34px 28px 28px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.file-tab {
+  position: absolute;
+  top: -14px;
+  left: 0;
+  margin: 0;
+  background: var(--amber);
+  color: var(--ink);
+  font-family: var(--f-mono);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 6px 6px 0 0;
+}
+.file h3 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: 26px;
+}
+.file p:not(.file-tab) {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+/* ---------- footer ---------- */
+.footer {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding-block: 28px 40px;
+  padding-left: var(--gutter);
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+  border-top: 1px solid var(--night-3);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.footer p {
+  margin: 0;
+}
+
+/* ---------- small screens ---------- */
+@media (max-width: 760px) {
+  .hero-inner {
+    grid-template-columns: 1fr;
+  }
+  .hero-owl {
+    order: -1;
+    justify-self: start;
+    max-width: 200px;
+  }
+  .file-grid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+  .stamp {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .owl-lids rect,
+  .owl-pupils {
+    animation: none;
+  }
+  .cta {
+    transition: none;
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "dyor-owl-core",
+  "version": "0.1.0",
+  "description": "DYOR Owl research engine: turns a Solana token address into a case file and Hoot score.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "dyor-owl": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "case": "tsx src/cli.ts",
+    "demo": "tsx src/cli.ts --demo",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@noble/curves": "^1.9.7"
+  }
+}
