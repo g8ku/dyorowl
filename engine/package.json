@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "case": "tsx src/cli.ts",
     "demo": "tsx src/cli.ts --demo",
+    "bot": "tsx src/bot/run.ts",
     "test": "node --import tsx --test test/*.test.ts"
   },
   "devDependencies": {

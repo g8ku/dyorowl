@@ -4,3 +4,5 @@ dist
 .env
 *.tsbuildinfo
 next-env.d.ts
+.bot-state.json
+.bot-state.json.tmp

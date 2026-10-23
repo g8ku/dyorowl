@@ -29,7 +29,7 @@ cd engine
 npm install
 cp .env.example .env     # then paste your RPC URL into .env
 npm run demo             # three made-up sample cases, no network needed
-npm test                 # 35 tests
+npm test                 # 48 tests
 ```
 
 Investigate a real coin:
@@ -83,6 +83,29 @@ The rules live in `src/score.ts`. Weights add up to 100:
 
 **Not checked yet** (don't claim these until they're built): whether launch snipers were funded by the same wallet, the dev's sell history and past launches, copycat tokens with the same name, chart patterns, socials.
 
+### The X bot
+
+`npm run bot` watches @dyorowl's mentions and replies with a case file. Someone can tag the owl with a contract address, or reply "@dyorowl" under a post that has one (or quote it).
+
+1. Fill in the `X_…` keys in `.env` (see `.env.example`).
+2. `npm run bot` runs in **dry run**: it reads mentions and prints the replies it would post, but posts nothing.
+3. When the replies look right, set `BOT_LIVE=true` and run it again.
+
+`npm run bot -- --once` does a single pass and exits, for running from a scheduler.
+
+Cost safeguards, all set in `.env`:
+
+- No contract address, no reply. Chatter is never answered.
+- A daily reply cap (default 50) and a per-person daily cap (default 3).
+- A coin's case file is reused for 15 minutes, so a coin being shilled everywhere is only investigated once.
+- It never replies to itself or to the same post twice, and on its very first run it skips old mentions instead of answering the backlog.
+- It stops, rather than retrying, if X says the keys are wrong, the app can't post, or the account is out of credits.
+- Every reply is numbered ("🦉 Case #42: $TICKER"), because X rejects identical posts.
+
+Also set a spending limit in the X developer portal with auto-recharge off. That is the safeguard that holds even if the bot misbehaves.
+
+The bot keeps its memory in `.bot-state.json`. It has to run somewhere that stays on (a small server, Railway, Fly.io, or your own computer to start with); Vercel's free plan isn't suitable because it doesn't run long-lived processes.
+
 ### Using it from code
 
 ```ts
@@ -121,7 +144,7 @@ Edit the copy in `web/app/page.tsx` and the colors in `web/app/globals.css`.
 ## Next steps
 
 1. **Run the engine on real coins** you know well and check the scores feel right before anything goes public. Tune thresholds in `src/score.ts`.
-2. **X bot:** poll mentions, pull the contract address, run `investigate`, post `renderReply`. Build in the cost safeguards: an X spending limit with auto-recharge off, a daily reply cap, per-user limits, and a per-contract cache.
+2. **X bot:** built (`npm run bot`, see above). Next: get X API keys, run it in dry run, then host it somewhere that stays on.
 3. **Site v2:** a "paste a contract address" tool page backed by a Next.js API route that calls the engine, plus the Owl Academy comics.
 
 Not financial advice. The owl checks a few things; it can't see everything.
