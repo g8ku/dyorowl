@@ -22,6 +22,12 @@ export interface BotConfig {
   cacheMinutes: number;
   /** On the very first run, start from the newest mention instead of answering the backlog. */
   skipBacklog: boolean;
+  /**
+   * Keep everyone in the thread tagged (X's default) instead of only the asker.
+   * More views, but X's automation rules forbid unsolicited automated mentions,
+   * so this risks the account being limited.
+   */
+  tagThread: boolean;
 }
 
 export interface BotDeps {
@@ -106,7 +112,7 @@ export async function runOnce(state: BotState, cfg: BotConfig, deps: BotDeps): P
     }
 
     try {
-      await deps.x.reply(reply, m.id, othersInThread(m, deps.me.id));
+      await deps.x.reply(reply, m.id, cfg.tagThread ? [] : othersInThread(m, deps.me.id));
     } catch (err) {
       if (err instanceof XApiError && err.isDuplicate) {
         // Same coin, same minute, same text: X won't post it again. Don't retry.
