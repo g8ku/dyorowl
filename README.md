@@ -108,6 +108,8 @@ Also set a spending limit in the X developer portal with auto-recharge off. That
 
 The bot keeps its memory in `.bot-state.json`. It has to run somewhere that stays on (a small server, Railway, Fly.io, or your own computer to start with); Vercel's free plan isn't suitable because it doesn't run long-lived processes.
 
+**On Railway:** create a service from this repo with **Root Directory** set to `engine`; `npm start` runs the bot. Put the settings from `.env.example` in the service's **Variables** (never in the repo). To keep the bot's memory across redeploys, attach a volume mounted at `/data` and set `BOT_STATE_FILE=/data/.bot-state.json`. Without one, a redeploy just makes the bot start fresh from the newest mention.
+
 ### Using it from code
 
 ```ts
