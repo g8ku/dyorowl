@@ -29,7 +29,7 @@ cd engine
 npm install
 cp .env.example .env     # then paste your RPC URL into .env
 npm run demo             # three made-up sample cases, no network needed
-npm test                 # 48 tests
+npm test                 # 51 tests
 ```
 
 Investigate a real coin:
@@ -75,6 +75,7 @@ The rules live in `src/score.ts`. Weights add up to 100:
 
 - Missing data is skipped and the score is rescaled; the reply says what share was checked.
 - Some checks don't apply and aren't counted against coverage: liquidity on a bonding curve, last-hour selling for coins over 3 days old, and launch snipers for coins over 7 days old (by then any big sniper bag shows up in the top holders).
+- Nothing scores 100: the top score is 99, because no coin is a sure thing.
 - Hard caps: an active mint or freeze authority caps the score at 40, and one wallet over 30% caps it at 35.
 - Token-2022 traps also cap it: a permanent delegate (someone can take your tokens) at 15, non-transferable at 10, a transfer hook, pausable transfers or frozen-by-default accounts at 40, and a transfer tax at 60 (any), 40 (5%+) or 25 (10%+).
 - The case file lists every cap that lowered the score.

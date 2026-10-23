@@ -146,3 +146,14 @@ test("an old coin isn't marked down because its launch is too far back to read",
   assert.equal(r.signals.find((x) => x.id === "snipers")!.notApplicable, true);
   assert.equal(r.coverage, 1);
 });
+
+test("no coin ever scores 100", () => {
+  const ev = clone(healthyCoin);
+  ev.holders = ev.holders!.map((h) => ({ ...h, pct: h.kind === "wallet" ? 1 : h.pct }));
+  ev.market!.liquidityUsd = 5_000_000;
+  ev.walletAges = { checked: 7, fresh1dPct: 0, fresh7dPct: 0, freshCount7d: 0 };
+  ev.creator!.holdsPct = 0;
+  const r = scoreEvidence(ev, now);
+  assert.equal(r.hootScore, CAPS.perfect);
+  assert.deepEqual(r.capsApplied, []);
+});

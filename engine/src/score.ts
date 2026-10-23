@@ -21,6 +21,7 @@ export const WEIGHTS = {
 } as const;
 
 export const CAPS = {
+  perfect: 99, // no coin is ever a sure thing, so nothing scores 100
   authorityActive: 40, // mint or freeze authority still live
   whaleOver30: 35, // one wallet holds more than 30%
   lowCoverageMax: 74, // can't be a "clean file" unless at least 80% of the checks ran
@@ -271,7 +272,8 @@ export function scoreEvidence(ev: Evidence, now?: Date): Report {
   const thinEvidence = coverage < CAPS.cleanMinCoverage;
   if (thinEvidence) cap(CAPS.lowCoverageMax, "Too few checks ran for a clean file");
 
-  const hootScore = Math.round(hoot);
+  // Applied after rounding, so 99.6 can't round up to 100. Not listed in capsApplied: it isn't a red flag.
+  const hootScore = Math.min(Math.round(hoot), CAPS.perfect);
   const verdict = verdictFor(hootScore);
   if (thinEvidence && verdict.band === "care") {
     verdict.advice = "Looks okay so far, but too much is still unknown for a clean file. Size small.";
