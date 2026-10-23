@@ -56,6 +56,14 @@ export const healthyCoin: Evidence = {
     poolAddresses: [POOL],
   },
   creator: { address: W[6], holdsPct: 2.1, isTopHolder: true },
+  launch: {
+    slot: 400_000_000,
+    windowSlots: 3,
+    buyers: [{ owner: W[6], boughtPct: 2.4, holdsPct: 2.1 }],
+    boughtPct: 2.4,
+    stillHeldPct: 2.1,
+  },
+  walletAges: { checked: 7, fresh1dPct: 0, fresh7dPct: 2.6, freshCount7d: 1 },
   gaps: [],
 };
 
@@ -88,6 +96,18 @@ export const ruggyCoin: Evidence = {
     poolAddresses: [POOL],
   },
   creator: { address: W[0], holdsPct: 42, isTopHolder: true },
+  launch: {
+    slot: 400_000_000,
+    windowSlots: 3,
+    buyers: [
+      { owner: W[0], boughtPct: 30, holdsPct: 42 },
+      { owner: W[1], boughtPct: 9, holdsPct: 8 },
+      { owner: W[2], boughtPct: 7, holdsPct: 6 },
+    ],
+    boughtPct: 46,
+    stillHeldPct: 56,
+  },
+  walletAges: { checked: 3, fresh1dPct: 14, fresh7dPct: 56, freshCount7d: 3 },
   gaps: [],
 };
 

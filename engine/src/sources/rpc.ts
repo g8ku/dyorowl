@@ -1,7 +1,7 @@
 /**
  * Minimal Solana JSON-RPC client using global fetch (Node 20+).
- * Retries on HTTP 429 / 5xx with exponential backoff, since free RPC tiers
- * rate-limit aggressively.
+ * Retries on HTTP 429 / 5xx, and on "busy, try again" RPC errors, with
+ * exponential backoff, since free RPC tiers rate-limit aggressively.
  */
 
 export class RpcError extends Error {
@@ -41,11 +41,20 @@ export function createRpcClient(
         if (!res.ok) throw new RpcError(`${method} failed: HTTP ${res.status}`, res.status);
 
         const body = (await res.json()) as { result?: T; error?: { message: string; code: number } };
+        if (body.error && isTransient(body.error) && attempt < maxRetries) {
+          await sleep(500 * 2 ** attempt);
+          continue;
+        }
         if (body.error) throw new RpcError(`${method} failed: ${body.error.message}`, body.error.code);
         return body.result as T;
       }
     },
   };
+}
+
+/** Errors a provider returns inside a 200 response that mean "busy, ask again" (e.g. Helius: "account index service overloaded"). */
+function isTransient(err: { message: string; code: number }): boolean {
+  return err.code === -32429 || err.code === -32005 || /overloaded|try again|rate limit|too many requests|timed out/i.test(err.message);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

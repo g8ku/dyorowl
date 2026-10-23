@@ -45,9 +45,13 @@ export function renderReply(r: Report, maxLen = 280): string {
     for (const s of [mint, freeze]) if (s) lines.push(`${ICON[s.severity]} ${s.label} ${s.value.toLowerCase()}`);
   }
 
+  // Token-2022 traps come right after, and only when there are any.
+  const rules = measured.find((s) => s.id === "tokenRules");
+  if (rules && rules.severity !== "good") lines.push(`${ICON[rules.severity]} ${replyLine(rules)}`);
+
   // Then the rest, worst first.
   const rest = measured
-    .filter((s) => s.id !== "mintAuthority" && s.id !== "freezeAuthority")
+    .filter((s) => s.id !== "mintAuthority" && s.id !== "freezeAuthority" && s.id !== "tokenRules")
     .sort((a, b) => RANK[a.severity] - RANK[b.severity] || b.weight - a.weight);
   for (const s of rest) lines.push(`${ICON[s.severity]} ${replyLine(s)}`);
 
@@ -70,6 +74,12 @@ function replyLine(s: Signal): string {
       return `Dev ${s.value}`;
     case "pressure":
       return `1h: ${s.value}`;
+    case "tokenRules":
+      return `Token: ${s.value}`;
+    case "snipers":
+      return `Snipers: ${s.value.replace("still hold", "hold")}`;
+    case "freshWallets":
+      return `Fresh wallets: ${s.value.replace(" held by wallets under 7d old", "")}`;
     default:
       return `${s.label}: ${s.value}`;
   }
@@ -88,10 +98,17 @@ export function renderCaseFile(r: Report): string {
   out.push(`## Hoot score: ${r.hootScore}/100. ${r.verdict.title}`);
   out.push(r.verdict.advice);
   out.push(`Evidence covered: ${Math.round(r.coverage * 100)}% of the checks.`);
+  for (const c of r.capsApplied ?? []) out.push(`Score capped: ${c}.`);
   out.push("");
   out.push("## Evidence");
   for (const s of r.signals) {
-    const pts = s.score === null ? "not scored" : `${Math.round(s.score * s.weight)}/${s.weight} pts`;
+    const pts = s.notApplicable
+      ? "doesn't apply"
+      : s.score === null
+        ? "not scored"
+        : s.weight === 0
+          ? s.severity === "good" ? "passed" : "caps the score"
+          : `${Math.round(s.score * s.weight)}/${s.weight} pts`;
     out.push(`- ${s.score === null ? "▫️" : ICON[s.severity]} **${s.label}:** ${s.value} (${pts})${s.detail ? `. ${s.detail}` : ""}`);
   }
   const wallets = ev.holders?.filter((h) => h.kind === "wallet").slice(0, 5);
@@ -99,7 +116,11 @@ export function renderCaseFile(r: Report): string {
     out.push("");
     out.push("## Top wallets");
     for (const h of wallets) {
-      const tag = ev.creator?.address === h.owner ? " (creator)" : "";
+      const tags = [
+        ev.creator?.address === h.owner ? "creator" : "",
+        ev.launch?.buyers.some((b) => b.owner === h.owner) ? "launch sniper" : "",
+      ].filter(Boolean);
+      const tag = tags.length ? ` (${tags.join(", ")})` : "";
       out.push(`- ${shortAddr(h.owner)}${tag}: ${h.pct.toFixed(2)}%`);
     }
   }

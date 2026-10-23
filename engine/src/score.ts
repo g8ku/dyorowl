@@ -10,12 +10,14 @@ import type { Evidence, Report, Severity, Signal, Verdict } from "./types.js";
 export const WEIGHTS = {
   mintAuthority: 15,
   freezeAuthority: 10,
-  top10: 25,
-  largestWallet: 10,
-  liquidity: 15,
+  top10: 20,
+  largestWallet: 5,
+  liquidity: 10,
   devHoldings: 10,
+  snipers: 10,
+  freshWallets: 10,
   age: 5,
-  pressure: 10,
+  pressure: 5,
 } as const;
 
 export const CAPS = {
@@ -23,7 +25,21 @@ export const CAPS = {
   whaleOver30: 35, // one wallet holds more than 30%
   lowCoverageMax: 74, // can't be a "clean file" unless at least 80% of the checks ran
   cleanMinCoverage: 0.8,
+  // Token-2022 traps
+  permanentDelegate: 15, // someone can move or burn your tokens
+  nonTransferable: 10, // you can't sell at all
+  transferHook: 40, // custom code runs on every transfer and can block sells
+  pausable: 40, // transfers can be switched off
+  defaultFrozen: 40, // new holders start frozen
+  taxOver10: 25,
+  taxOver5: 40,
+  anyTax: 60,
 };
+
+/** Coins older than this aren't scored on last-hour selling: for an established coin it's just trading. */
+const PRESSURE_MAX_AGE_HOURS = 72;
+/** Past this, a coin's launch is usually too far back to read, so missing sniper data isn't held against it. */
+const SNIPERS_MAX_AGE_HOURS = 7 * 24;
 
 /** DexScreener dexIds that mean the token is still on a launchpad bonding curve. */
 const BONDING_CURVE_DEXES = new Set(["pumpfun", "moonshot"]);
@@ -62,6 +78,16 @@ export function buildSignals(ev: Evidence, now: Date = new Date(ev.fetchedAt)): 
       score: frozen ? 1 : 0,
       weight: WEIGHTS.freezeAuthority,
       detail: frozen ? "No one can freeze your tokens." : "The dev can freeze token accounts, which can stop you selling.",
+    });
+    // Token-2022 traps (no weight: they act through hard caps instead)
+    const traps = trapsOf(ev);
+    add({
+      id: "tokenRules",
+      label: "Token rules",
+      value: traps.length ? traps.map((t) => t.label).join(", ") : ev.token.program === "token-2022" ? "Token-2022, no traps found" : "Standard token",
+      score: traps.length === 0 ? 1 : Math.min(...traps.map((t) => t.cap)) <= 40 ? 0 : 0.5,
+      weight: 0,
+      detail: traps.length ? traps.map((t) => t.detail).join(" ") : "No transfer tax, no permanent delegate, no transfer hook.",
     });
   } else {
     add({ id: "mintAuthority", label: "Mint authority", value: "Not checked", score: null, weight: WEIGHTS.mintAuthority });
@@ -104,11 +130,21 @@ export function buildSignals(ev: Evidence, now: Date = new Date(ev.fetchedAt)): 
       weight: WEIGHTS.liquidity,
       detail: "Still on the launchpad curve, so pool liquidity doesn't apply yet.",
       severity: "warn",
+      notApplicable: true,
     });
   } else if (m?.liquidityUsd !== undefined) {
     const liq = m.liquidityUsd;
     const score = liq <= 0 ? 0 : higherIsBetter(Math.log10(liq), Math.log10(10_000), Math.log10(50_000));
     add({ id: "liquidity", label: "Liquidity", value: fmtUsd(liq), score, weight: WEIGHTS.liquidity });
+  } else if (m) {
+    add({
+      id: "liquidity",
+      label: "Liquidity",
+      value: "Not reported",
+      score: null,
+      weight: WEIGHTS.liquidity,
+      detail: "DexScreener doesn't report liquidity for the main pair (often a pool against another token).",
+    });
   } else {
     add({ id: "liquidity", label: "Liquidity", value: "Not checked", score: null, weight: WEIGHTS.liquidity });
   }
@@ -127,17 +163,68 @@ export function buildSignals(ev: Evidence, now: Date = new Date(ev.fetchedAt)): 
     add({ id: "devHoldings", label: "Dev wallet", value: "Not traced", score: null, weight: WEIGHTS.devHoldings });
   }
 
-  // 7. Age
-  if (m?.pairCreatedAt) {
-    const hours = Math.max(0, (now.getTime() - m.pairCreatedAt) / 3_600_000);
+  const ageHours = m?.pairCreatedAt ? Math.max(0, (now.getTime() - m.pairCreatedAt) / 3_600_000) : undefined;
+
+  // 7. Launch snipers and bundles: what the first-blocks buyers still hold
+  const l = ev.launch;
+  if (l) {
+    const n = l.buyers.length;
+    const seconds = Math.max(1, Math.round((l.windowSlots + 1) * 0.4));
+    add({
+      id: "snipers",
+      label: "Launch snipers",
+      value: n === 0 ? "None found" : `bought ${fmtPct(l.boughtPct)}, still hold ${fmtPct(l.stillHeldPct)}`,
+      score: lowerIsBetter(l.stillHeldPct, 3, 15),
+      weight: WEIGHTS.snipers,
+      detail:
+        n === 0
+          ? `No wallet bought in the first ~${seconds}s after launch.`
+          : `${n} wallet${n === 1 ? "" : "s"} (dev included) bought in the first ~${seconds}s after launch, which takes a bundle or a bot. Scored on what they still hold.`,
+    });
+  } else if (ageHours !== undefined && ageHours > SNIPERS_MAX_AGE_HOURS) {
+    // An old coin's launch is too far back to read, and any big sniper bag shows up in the top holders anyway.
+    add({ id: "snipers", label: "Launch snipers", value: "Not checked on coins over 7 days old", score: null, weight: WEIGHTS.snipers, notApplicable: true });
+  } else {
+    add({ id: "snipers", label: "Launch snipers", value: "Not checked", score: null, weight: WEIGHTS.snipers });
+  }
+
+  // 8. Fresh wallets among the largest holders
+  const a = ev.walletAges;
+  if (a && a.checked > 0) {
+    add({
+      id: "freshWallets",
+      label: "Fresh wallets",
+      value: `${fmtPct(a.fresh7dPct)} held by wallets under 7d old`,
+      score: lowerIsBetter(a.fresh7dPct, 3, 15),
+      weight: WEIGHTS.freshWallets,
+      detail: `${a.freshCount7d} of the top ${a.checked} wallets were created in the last week (${fmtPct(a.fresh1dPct)} of supply in the last 24h). Brand-new wallets often mean one person split their bag.`,
+    });
+  } else if (a) {
+    add({ id: "freshWallets", label: "Fresh wallets", value: "No wallets to check", score: null, weight: WEIGHTS.freshWallets, notApplicable: true });
+  } else {
+    add({ id: "freshWallets", label: "Fresh wallets", value: "Not checked", score: null, weight: WEIGHTS.freshWallets });
+  }
+
+  // 9. Age
+  if (ageHours !== undefined) {
+    const hours = ageHours;
     add({ id: "age", label: "Age", value: fmtAge(hours), score: higherIsBetter(hours, 1, 24), weight: WEIGHTS.age });
   } else {
     add({ id: "age", label: "Age", value: "Not checked", score: null, weight: WEIGHTS.age });
   }
 
-  // 8. Buy vs sell pressure, last hour (needs at least 10 trades to mean anything)
+  // 10. Buy vs sell pressure, last hour (needs at least 10 trades, and only for young coins)
   const t = m?.txns1h;
-  if (t && t.buys + t.sells >= 10) {
+  if (ageHours !== undefined && ageHours > PRESSURE_MAX_AGE_HOURS) {
+    add({
+      id: "pressure",
+      label: "Last hour",
+      value: "Not scored after 3 days",
+      score: null,
+      weight: WEIGHTS.pressure,
+      notApplicable: true,
+    });
+  } else if (t && t.buys + t.sells >= 10) {
     const ratio = t.buys === 0 ? Infinity : t.sells / t.buys;
     add({
       id: "pressure",
@@ -163,25 +250,83 @@ export function scoreEvidence(ev: Evidence, now?: Date): Report {
   const signals = buildSignals(ev, now);
   const measured = signals.filter((s) => s.score !== null);
   const measuredWeight = measured.reduce((s, x) => s + x.weight, 0);
-  const totalWeight = signals.reduce((s, x) => s + x.weight, 0);
+  const totalWeight = signals.filter((s) => !s.notApplicable).reduce((s, x) => s + x.weight, 0);
 
   let hoot = measuredWeight > 0 ? (measured.reduce((s, x) => s + x.weight * x.score!, 0) / measuredWeight) * 100 : 0;
   const coverage = totalWeight > 0 ? measuredWeight / totalWeight : 0;
 
   // Hard caps: some red flags override an otherwise good score.
+  const capsApplied: string[] = [];
+  const cap = (max: number, reason: string) => {
+    if (hoot > max) {
+      hoot = max;
+      capsApplied.push(`${reason} (max ${max})`);
+    }
+  };
   const authorityActive = ev.token && (ev.token.mintAuthority !== null || ev.token.freezeAuthority !== null);
-  if (authorityActive) hoot = Math.min(hoot, CAPS.authorityActive);
+  if (authorityActive) cap(CAPS.authorityActive, "Mint or freeze authority is still active");
+  for (const t of trapsOf(ev)) cap(t.cap, t.capReason);
   const largest = ev.holders?.find((h) => h.kind === "wallet")?.pct ?? 0;
-  if (largest > 30) hoot = Math.min(hoot, CAPS.whaleOver30);
+  if (largest > 30) cap(CAPS.whaleOver30, `One wallet holds ${fmtPct(largest)}`);
   const thinEvidence = coverage < CAPS.cleanMinCoverage;
-  if (thinEvidence) hoot = Math.min(hoot, CAPS.lowCoverageMax);
+  if (thinEvidence) cap(CAPS.lowCoverageMax, "Too few checks ran for a clean file");
 
   const hootScore = Math.round(hoot);
   const verdict = verdictFor(hootScore);
   if (thinEvidence && verdict.band === "care") {
     verdict.advice = "Looks okay so far, but too much is still unknown for a clean file. Size small.";
   }
-  return { evidence: ev, signals, hootScore, coverage, verdict };
+  return { evidence: ev, signals, hootScore, coverage, verdict, capsApplied };
+}
+
+interface Trap {
+  label: string; // short, for the card
+  detail: string; // one sentence, for the case file
+  cap: number;
+  capReason: string;
+}
+
+/** Token-2022 settings that let the dev tax, block or take holders' tokens. */
+function trapsOf(ev: Evidence): Trap[] {
+  const r = ev.token?.risks;
+  if (!r) return [];
+  const traps: Trap[] = [];
+  if (r.permanentDelegate) {
+    traps.push({
+      label: "permanent delegate",
+      detail: "One address can move or burn anyone's tokens at any time.",
+      cap: CAPS.permanentDelegate,
+      capReason: "A permanent delegate can take holders' tokens",
+    });
+  }
+  if (r.nonTransferable) {
+    traps.push({ label: "can't be transferred", detail: "Tokens can't be moved, so they can't be sold.", cap: CAPS.nonTransferable, capReason: "Tokens can't be transferred" });
+  }
+  if (r.transferFeeBps) {
+    const pct = r.transferFeeBps / 100;
+    const [max, why] = pct >= 10 ? [CAPS.taxOver10, "10%+"] : pct >= 5 ? [CAPS.taxOver5, "5%+"] : [CAPS.anyTax, "any"];
+    traps.push({
+      label: `${pct.toFixed(pct % 1 ? 1 : 0)}% transfer tax`,
+      detail: `Every transfer, including buys and sells, pays a ${pct}% fee to the dev's fee account.`,
+      cap: max,
+      capReason: `Transfer tax (${why})`,
+    });
+  }
+  if (r.transferHookProgram) {
+    traps.push({
+      label: "transfer hook",
+      detail: "Custom code runs on every transfer and can block sells.",
+      cap: CAPS.transferHook,
+      capReason: "A transfer hook can block sells",
+    });
+  }
+  if (r.pausable) {
+    traps.push({ label: "pausable", detail: "An authority can pause all transfers.", cap: CAPS.pausable, capReason: "Transfers can be paused" });
+  }
+  if (r.defaultFrozen) {
+    traps.push({ label: "frozen by default", detail: "New token accounts start frozen until the dev unfreezes them.", cap: CAPS.defaultFrozen, capReason: "New holders start frozen" });
+  }
+  return traps;
 }
 
 export function verdictFor(score: number): Verdict {
@@ -193,6 +338,7 @@ export function verdictFor(score: number): Verdict {
 
 // ---- formatting helpers (shared with render.ts) ----
 export function fmtPct(x: number): string {
+  if (x === 0) return "0%";
   if (x > 0 && x < 0.1) return "<0.1%";
   return `${x < 10 ? x.toFixed(1) : Math.round(x)}%`;
 }

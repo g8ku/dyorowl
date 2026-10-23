@@ -14,8 +14,11 @@ const DEV = "TnwAxosU8ktpUAKNtemzMevVCZzejsrwishXA31hUDK";
 const W1 = "954tHrQZbCtqEchfMT7u27bLBh63hqrcGr6vuFvBrSQh";
 const TA = ["9MdXQZcX7K6D4tTwLztyR5E1QhBf5559F6GjgPGXChoS", "6T35SwUqMAHsBoAammaPQfHcmwpxi8yDVGWrKE9eT24t", "7kcz2rRgbqCmsjB8DBHt7sQzcas1iPqhKBWgRB8Vh8gs", "5UBctrxczucWM1RKqLeB4QHiUG4C7Ldicq2aeUA2mwSk"];
 
-function fakeRpc(overrides: Record<string, (params: unknown[]) => unknown> = {}): RpcClient & { calls: string[] } {
+const OLD = Date.parse("2025-01-01T00:00:00Z") / 1000;
+
+function fakeRpc(overrides: Record<string, (params: unknown[]) => unknown> = {}): RpcClient & { calls: string[]; log: [string, unknown[]][] } {
   const calls: string[] = [];
+  const log: [string, unknown[]][] = [];
   const handlers: Record<string, (params: unknown[]) => unknown> = {
     getAccountInfo: () => ({
       value: {
@@ -34,15 +37,33 @@ function fakeRpc(overrides: Record<string, (params: unknown[]) => unknown> = {})
     getMultipleAccounts: () => ({
       value: [POOL, W1, W1, DEV].map((owner) => ({ owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", data: { parsed: { type: "account", info: { owner } } } })),
     }),
-    getSignaturesForAddress: () => [{ signature: "sig2" }, { signature: "sig1" }],
-    getTransaction: () => ({ transaction: { message: { accountKeys: [{ pubkey: DEV, signer: true }] } } }),
+    // The mint's history is the launch (sig1) and one later trade; wallets are long-established.
+    getSignaturesForAddress: ([addr]) =>
+      addr === MINT
+        ? [
+            { signature: "sig2", slot: 120 },
+            { signature: "sig1", slot: 100 },
+          ]
+        : [{ signature: "w1", blockTime: OLD }],
+    getTransaction: () => ({
+      transaction: { message: { accountKeys: [{ pubkey: DEV, signer: true }] } },
+      meta: {
+        preTokenBalances: [{ mint: MINT, owner: POOL, uiTokenAmount: { uiAmountString: "1000000000" } }],
+        postTokenBalances: [
+          { mint: MINT, owner: POOL, uiTokenAmount: { uiAmountString: "980000000" } },
+          { mint: MINT, owner: DEV, uiTokenAmount: { uiAmountString: "20000000" } },
+        ],
+      },
+    }),
     getTokenAccountsByOwner: () => ({ value: [{ account: { data: { parsed: { info: { tokenAmount: { uiAmountString: "20000000" } } } } } }] }),
     ...overrides,
   };
   return {
     calls,
+    log,
     async call<T>(method: string, params: unknown[]): Promise<T> {
       calls.push(method);
+      log.push([method, params]);
       const h = handlers[method];
       if (!h) throw new Error(`unexpected ${method}`);
       return h(params) as T;
@@ -88,6 +109,12 @@ test("gathers mint, market, holders and creator from real-shaped responses", asy
 
   assert.equal(ev.creator?.address, DEV);
   assert.equal(ev.creator?.holdsPct, 2);
+
+  // The dev bought 2% in the launch transaction and still holds it; the off-curve pool isn't a buyer.
+  assert.equal(ev.launch?.slot, 100);
+  assert.deepEqual(ev.launch?.buyers, [{ owner: DEV, boughtPct: 2, holdsPct: 2 }]);
+  assert.equal(ev.walletAges?.checked, 2);
+  assert.equal(ev.walletAges?.fresh7dPct, 0);
   assert.deepEqual(ev.gaps, []);
 
   const r = scoreEvidence(ev);
@@ -117,8 +144,64 @@ test("a wallet address instead of a mint gives a clear error", async () => {
 test("creator lookup stops at the page budget", async () => {
   const full = Array.from({ length: 1000 }, (_, i) => ({ signature: `s${i}` }));
   const rpc = fakeRpc({ getSignaturesForAddress: () => full });
-  const ev = await gatherEvidence(MINT, { rpc, fetchImpl: dexFetch, creatorLookupMaxPages: 2, now });
+  const ev = await gatherEvidence(MINT, { rpc, fetchImpl: dexFetch, creatorLookupMaxPages: 2, youngCoinMaxPages: 2, now });
   assert.equal(ev.creator, undefined);
-  assert.equal(rpc.calls.filter((c) => c === "getSignaturesForAddress").length, 2);
+  assert.equal(rpc.log.filter(([m, p]) => m === "getSignaturesForAddress" && p[0] === MINT).length, 2);
   assert.match(ev.gaps.join(" "), /creator wallet/);
+  assert.match(ev.gaps.join(" "), /snipers/);
+  // Wallets with 1,000+ transactions count as established, not fresh.
+  assert.equal(ev.walletAges?.fresh7dPct, 0);
+});
+
+test("reads Token-2022 traps from the mint", async () => {
+  const rpc = fakeRpc({
+    getAccountInfo: () => ({
+      value: {
+        owner: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+        data: {
+          program: "spl-token-2022",
+          parsed: {
+            type: "mint",
+            info: {
+              decimals: 6,
+              supply: "1000000000000000",
+              mintAuthority: null,
+              freezeAuthority: null,
+              extensions: [
+                { extension: "transferFeeConfig", state: { olderTransferFee: { transferFeeBasisPoints: 300 }, newerTransferFee: { transferFeeBasisPoints: 500 } } },
+                { extension: "permanentDelegate", state: { delegate: DEV } },
+                { extension: "metadataPointer", state: {} },
+              ],
+            },
+          },
+        },
+      },
+    }),
+  });
+  const ev = await gatherEvidence(MINT, { rpc, fetchImpl: dexFetch, now });
+  assert.equal(ev.token?.program, "token-2022");
+  assert.deepEqual(ev.token?.risks, { transferFeeBps: 500, permanentDelegate: DEV });
+});
+
+test("retries when the RPC says it's overloaded", async () => {
+  const { createRpcClient } = await import("../src/sources/rpc.js");
+  let n = 0;
+  const flaky = (async () => {
+    n++;
+    const body = n === 1 ? { error: { code: -32603, message: "account index service overloaded, please try again." } } : { result: 42 };
+    return new Response(JSON.stringify(body), { status: 200 });
+  }) as typeof fetch;
+  const rpc = createRpcClient("http://rpc.test", { fetchImpl: flaky });
+  assert.equal(await rpc.call("getTokenLargestAccounts", []), 42);
+  assert.equal(n, 2);
+});
+
+test("the main pair is the most-traded one, not a near-empty side pool", async () => {
+  const { toMarket } = await import("../src/sources/dexscreener.js");
+  const { market } = toMarket(MINT, [
+    { chainId: "solana", dexId: "meteora", pairAddress: "side", baseToken: { address: MINT }, liquidity: { usd: 2.48 }, txns: { h24: { buys: 1, sells: 0 } } },
+    { chainId: "solana", dexId: "pumpswap", pairAddress: "main", baseToken: { address: MINT }, txns: { h24: { buys: 2236, sells: 1467 } } },
+  ]);
+  assert.equal(market?.pairAddress, "main");
+  assert.equal(market?.liquidityUsd, undefined);
 });

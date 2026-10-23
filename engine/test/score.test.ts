@@ -84,3 +84,65 @@ test("too few trades means pressure isn't scored", () => {
   ev.market!.txns1h = { buys: 3, sells: 4 };
   assert.equal(buildSignals(ev, now).find((s) => s.id === "pressure")!.score, null);
 });
+
+test("a permanent delegate caps the score hard and says why", () => {
+  const ev = clone(healthyCoin);
+  ev.token!.risks = { permanentDelegate: "TnwAxosU8ktpUAKNtemzMevVCZzejsrwishXA31hUDK" };
+  const r = scoreEvidence(ev, now);
+  assert.equal(r.hootScore, CAPS.permanentDelegate);
+  assert.match(r.capsApplied.join(" "), /permanent delegate/);
+  assert.equal(r.signals.find((s) => s.id === "tokenRules")!.severity, "bad");
+});
+
+test("transfer tax caps scale with the rate", () => {
+  const at = (bps: number) => {
+    const ev = clone(healthyCoin);
+    ev.token!.risks = { transferFeeBps: bps };
+    return scoreEvidence(ev, now).hootScore;
+  };
+  assert.equal(at(100), CAPS.anyTax);
+  assert.equal(at(500), CAPS.taxOver5);
+  assert.equal(at(1000), CAPS.taxOver10);
+});
+
+test("snipers still holding a big share lose the points", () => {
+  const ev = clone(healthyCoin);
+  ev.launch = { slot: 1, windowSlots: 3, buyers: [{ owner: "a", boughtPct: 20, holdsPct: 18 }], boughtPct: 20, stillHeldPct: 18 };
+  const s = buildSignals(ev, now).find((x) => x.id === "snipers")!;
+  assert.equal(s.score, 0);
+  assert.equal(s.severity, "bad");
+});
+
+test("fresh wallets are scored on their share of supply", () => {
+  const ev = clone(healthyCoin);
+  ev.walletAges = { checked: 10, fresh1dPct: 4, fresh7dPct: 9, freshCount7d: 3 };
+  const s = buildSignals(ev, now).find((x) => x.id === "freshWallets")!;
+  assert.ok(Math.abs(s.score! - 0.5) < 0.01);
+});
+
+test("last-hour selling doesn't count for coins older than 3 days, and doesn't hurt coverage", () => {
+  const ev = clone(healthyCoin);
+  ev.market!.pairCreatedAt = Date.parse(DEMO_NOW) - 30 * 86_400_000;
+  ev.market!.txns1h = { buys: 10, sells: 90 };
+  const r = scoreEvidence(ev, now);
+  const p = r.signals.find((x) => x.id === "pressure")!;
+  assert.equal(p.score, null);
+  assert.equal(p.notApplicable, true);
+  assert.equal(r.coverage, 1);
+});
+
+test("exchange wallets are left out of concentration", () => {
+  const ev = clone(healthyCoin);
+  ev.holders!.unshift({ owner: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", amount: 0, pct: 14, kind: "exchange" });
+  const r = scoreEvidence(ev, now);
+  assert.equal(r.signals.find((x) => x.id === "largestWallet")!.value, "6.2% of supply");
+});
+
+test("an old coin isn't marked down because its launch is too far back to read", () => {
+  const ev = clone(healthyCoin);
+  delete ev.launch;
+  ev.market!.pairCreatedAt = Date.parse(DEMO_NOW) - 30 * 86_400_000;
+  const r = scoreEvidence(ev, now);
+  assert.equal(r.signals.find((x) => x.id === "snipers")!.notApplicable, true);
+  assert.equal(r.coverage, 1);
+});

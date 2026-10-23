@@ -41,15 +41,21 @@ export async function fetchPairs(mint: string, fetchImpl: typeof fetch = fetch):
 }
 
 /**
- * Pick the main pair (highest USD liquidity where the token is the base token)
- * and convert it into our Evidence["market"] shape.
+ * Pick the main pair (the most-traded pair over 24h where the token is the base
+ * token, then the highest USD liquidity) and convert it into our
+ * Evidence["market"] shape. Activity comes first because DexScreener leaves
+ * liquidity blank for some pairs (e.g. a pool against another memecoin), and
+ * sorting on liquidity alone then picks a near-empty side pool.
  */
 export function toMarket(mint: string, pairs: DexPair[]): { market?: Evidence["market"]; name?: string; symbol?: string } {
   const ours = pairs.filter((p) => p.chainId === undefined || p.chainId === "solana");
   if (ours.length === 0) return {};
 
   const asBase = ours.filter((p) => p.baseToken?.address === mint);
-  const pool = (asBase.length ? asBase : ours).slice().sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
+  const trades = (p: DexPair) => (p.txns?.h24?.buys ?? 0) + (p.txns?.h24?.sells ?? 0);
+  const pool = (asBase.length ? asBase : ours)
+    .slice()
+    .sort((a, b) => trades(b) - trades(a) || (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
   const main = pool[0]!;
 
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);

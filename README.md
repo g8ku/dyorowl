@@ -29,7 +29,7 @@ cd engine
 npm install
 cp .env.example .env     # then paste your RPC URL into .env
 npm run demo             # three made-up sample cases, no network needed
-npm test                 # 25 tests
+npm test                 # 35 tests
 ```
 
 Investigate a real coin:
@@ -46,11 +46,15 @@ npm run case -- <contract address> --json    # everything as JSON
 
 | Data | Source |
 |---|---|
-| Supply, decimals, mint & freeze authority | Solana RPC `getAccountInfo` |
+| Supply, decimals, mint & freeze authority, Token-2022 extensions | Solana RPC `getAccountInfo` |
 | Largest holders | Solana RPC `getTokenLargestAccounts` (top 20 token accounts), grouped by owner |
-| Pool vs wallet | Owner matches a DexScreener pair address, or the owner is off-curve (a program-derived address such as a bonding curve, pool or locker) |
+| Pool vs wallet vs exchange | Owner matches a DexScreener pair address, or the owner is off-curve (a program-derived address such as a bonding curve, pool or locker), or it's on the known exchange hot-wallet list in `src/sources/solana.ts` |
 | Creator wallet | Fee payer of the mint's oldest transaction, then its current balance |
-| Liquidity, age, trades, price | DexScreener `token-pairs/v1/solana/{address}` (no key) |
+| Launch snipers | The mint's transactions in its first 4 slots (~2s), read with `getTransaction`; any wallet whose balance went up is an early buyer |
+| Fresh wallets | Oldest transaction of each of the top 10 wallets (`getSignaturesForAddress`); a wallet with 1,000+ transactions counts as established |
+| Liquidity, age, trades, price | DexScreener `token-pairs/v1/solana/{address}` (no key). The main pair is the most-traded one over 24h |
+
+Walking back to a coin's launch costs one RPC call per 1,000 transactions. The budget is `CREATOR_LOOKUP_MAX_PAGES` (default 5), raised to 30 for coins under a week old. A very busy new coin can still run past it, and then the dev wallet and launch snipers show as not checked.
 
 ### The Hoot score
 
@@ -60,19 +64,24 @@ The rules live in `src/score.ts`. Weights add up to 100:
 |---|---|---|---|
 | Mint authority revoked | 15 | revoked | active |
 | Freeze authority revoked | 10 | revoked | active |
-| Top 10 wallets (pools excluded) | 25 | ≤ 20% | ≥ 50% |
-| Largest wallet | 10 | ≤ 5% | ≥ 15% |
-| Liquidity (log scale) | 15 | ≥ $50K | ≤ $10K |
+| Top 10 wallets (pools and exchanges excluded) | 20 | ≤ 20% | ≥ 50% |
+| Largest wallet | 5 | ≤ 5% | ≥ 15% |
+| Liquidity (log scale) | 10 | ≥ $50K | ≤ $10K |
 | Dev wallet holdings | 10 | ≤ 3% | ≥ 10% |
+| Launch snipers: share they still hold | 10 | ≤ 3% | ≥ 15% |
+| Fresh wallets: share held by top-10 wallets under 7 days old | 10 | ≤ 3% | ≥ 15% |
 | Age | 5 | ≥ 24h | ≤ 1h |
-| Last-hour sells per buy (needs 10+ trades) | 10 | ≤ 1 | ≥ 2 |
+| Last-hour sells per buy (needs 10+ trades) | 5 | ≤ 1 | ≥ 2 |
 
 - Missing data is skipped and the score is rescaled; the reply says what share was checked.
+- Some checks don't apply and aren't counted against coverage: liquidity on a bonding curve, last-hour selling for coins over 3 days old, and launch snipers for coins over 7 days old (by then any big sniper bag shows up in the top holders).
 - Hard caps: an active mint or freeze authority caps the score at 40, and one wallet over 30% caps it at 35.
+- Token-2022 traps also cap it: a permanent delegate (someone can take your tokens) at 15, non-transferable at 10, a transfer hook, pausable transfers or frozen-by-default accounts at 40, and a transfer tax at 60 (any), 40 (5%+) or 25 (10%+).
+- The case file lists every cap that lowered the score.
 - Under 80% coverage the score is capped at 74, so a coin can't be called a "Clean file" while too much is unknown.
 - Verdicts: 75+ Clean file · 50–74 Proceed with care · 25–49 Suspicious · under 25 Red flags everywhere.
 
-**Not checked yet** (don't claim these until they're built): bundled launches, the dev's sell history, chart patterns, socials.
+**Not checked yet** (don't claim these until they're built): whether launch snipers were funded by the same wallet, the dev's sell history and past launches, copycat tokens with the same name, chart patterns, socials.
 
 ### Using it from code
 
