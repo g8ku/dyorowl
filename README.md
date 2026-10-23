@@ -1,6 +1,6 @@
 # DYOR Owl
 
-An AI detective owl that investigates memecoins, plus comics that teach you to do it yourself.
+An owl that investigates memecoins, plus comics that teach you to do it yourself.
 
 ```
 dyorowl/
