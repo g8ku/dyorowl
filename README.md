@@ -18,7 +18,6 @@ Takes a Solana token's contract address, pulls on-chain and market data, scores 
 - **a long-form case file** for the website and logs
 - **JSON** for anything else
 
-It doesn't call any AI model, so a case costs nothing in AI tokens. The only costs are your RPC provider and, later, the X API.
 
 ### Setup
 
