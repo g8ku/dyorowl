@@ -35,7 +35,13 @@ export interface XClient {
 }
 
 export class XApiError extends Error {
-  constructor(message: string, public readonly status: number, public readonly body: string) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly body: string,
+    /** From x-rate-limit-reset: when the rate limit window reopens (epoch ms). */
+    public readonly resetAt?: number
+  ) {
     super(message);
     this.name = "XApiError";
   }
@@ -59,7 +65,10 @@ export function createXClient(creds: XCredentials, fetchImpl: typeof fetch = fet
       signal: AbortSignal.timeout(15_000),
     });
     const text = await res.text();
-    if (!res.ok) throw new XApiError(`X API ${method} ${path} failed: HTTP ${res.status}`, res.status, text);
+    if (!res.ok) {
+      const reset = Number(res.headers.get("x-rate-limit-reset"));
+      throw new XApiError(`X API ${method} ${path} failed: HTTP ${res.status}`, res.status, text, reset > 0 ? reset * 1000 : undefined);
+    }
     return JSON.parse(text) as T;
   }
 

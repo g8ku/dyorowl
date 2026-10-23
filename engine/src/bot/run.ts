@@ -37,7 +37,7 @@ const cfg: BotConfig = {
   cacheMinutes: num("BOT_CACHE_MINUTES", 15),
   skipBacklog: env("BOT_ANSWER_BACKLOG") !== "true",
 };
-const pollMs = num("BOT_POLL_SECONDS", 120) * 1000;
+const pollMs = num("BOT_POLL_SECONDS", 30) * 1000;
 const statePath = env("BOT_STATE_FILE") ?? ".bot-state.json";
 const once = process.argv.includes("--once");
 
@@ -71,9 +71,11 @@ async function main() {
       );
     } catch (err) {
       if (err instanceof XApiError && err.status === 429) {
-        log("X rate limit hit; waiting 15 minutes.");
+        // Wait until X says the window reopens (plus a little slack), or 15 minutes if it doesn't say.
+        const waitMs = err.resetAt ? Math.max(5_000, err.resetAt - Date.now() + 2_000) : 15 * 60_000;
+        log(`X rate limit hit; waiting ${Math.ceil(waitMs / 60_000)} min. If this keeps happening, raise BOT_POLL_SECONDS.`);
         if (once) return;
-        await sleep(15 * 60_000);
+        await sleep(waitMs);
         continue;
       }
       if (err instanceof XApiError && [401, 402, 403].includes(err.status)) {

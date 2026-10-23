@@ -140,3 +140,11 @@ test("OAuth 1.0a signature matches X's documented example", () => {
   );
   assert.match(header, /oauth_signature="hCtSmYh%2BiHYCEqBWrE7C7hYmtUk%3D"/);
 });
+
+test("a rate-limit error carries X's reset time", async () => {
+  const { createXClient } = await import("../src/bot/x.js");
+  const limited = (async () =>
+    new Response("{}", { status: 429, headers: { "x-rate-limit-reset": "1800000000" } })) as typeof fetch;
+  const x = createXClient({ apiKey: "k", apiSecret: "s", accessToken: "t", accessSecret: "a" }, limited);
+  await assert.rejects(x.me(), (err: unknown) => err instanceof XApiError && err.status === 429 && err.resetAt === 1_800_000_000_000);
+});
