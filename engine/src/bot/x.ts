@@ -31,6 +31,7 @@ export interface MentionsPage {
 export interface XClient {
   me(): Promise<{ id: string; username: string }>;
   mentions(userId: string, sinceId?: string): Promise<MentionsPage>;
+  tweet(id: string): Promise<Tweet | undefined>;
   reply(text: string, inReplyTo: string): Promise<{ id: string }>;
 }
 
@@ -94,6 +95,11 @@ export function createXClient(creds: XCredentials, fetchImpl: typeof fetch = fet
         referenced: new Map((r.includes?.tweets ?? []).map((t) => [t.id, t])),
         newestId: r.meta?.newest_id,
       };
+    },
+
+    async tweet(id) {
+      const r = await request<{ data?: Tweet }>("GET", `/tweets/${id}`, { "tweet.fields": "author_id,referenced_tweets" });
+      return r.data;
     },
 
     async reply(text, inReplyTo) {

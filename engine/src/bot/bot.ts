@@ -67,7 +67,7 @@ export async function runOnce(state: BotState, cfg: BotConfig, deps: BotDeps): P
       skip(m, "already answered");
       continue;
     }
-    const mint = findMint(m, page.referenced);
+    const mint = findMint(m, page.referenced) ?? (await findMintUpstream(m, page.referenced, deps.x).catch(() => undefined));
     if (!mint) {
       skip(m, "no contract address");
       continue;
@@ -150,6 +150,25 @@ export function findMint(m: Tweet, referenced: Map<string, Tweet>): string | und
     const parent = referenced.get(ref.id);
     const found = parent && extractAddress(parent.text);
     if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * One step further up: when the post someone replied under has no address,
+ * check the post *it* quotes or replies to (a project quoting its own launch
+ * post, say). Costs one extra read, and only when the cheap lookup failed.
+ */
+export async function findMintUpstream(m: Tweet, referenced: Map<string, Tweet>, x: XClient): Promise<string | undefined> {
+  for (const ref of m.referenced_tweets ?? []) {
+    if (ref.type === "retweeted") continue;
+    const parent = referenced.get(ref.id);
+    for (const up of parent?.referenced_tweets ?? []) {
+      if (up.type === "retweeted") continue;
+      const grandparent = await x.tweet(up.id);
+      const found = grandparent && extractAddress(grandparent.text);
+      if (found) return found;
+    }
   }
   return undefined;
 }

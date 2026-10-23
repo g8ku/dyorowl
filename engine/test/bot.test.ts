@@ -13,7 +13,7 @@ const now = () => new Date(DEMO_NOW);
 const cfg: BotConfig = { live: true, dailyReplyCap: 50, perUserDailyCap: 3, cacheMinutes: 15, skipBacklog: false };
 const report = scoreEvidence(healthyCoin, new Date(DEMO_NOW));
 
-function fakeX(tweets: Tweet[], referenced: Tweet[] = [], opts: { failWith?: XApiError } = {}) {
+function fakeX(tweets: Tweet[], referenced: Tweet[] = [], opts: { failWith?: XApiError; lookup?: Tweet[] } = {}) {
   const posted: { text: string; inReplyTo: string }[] = [];
   const x: XClient = {
     me: async () => ME,
@@ -22,6 +22,7 @@ function fakeX(tweets: Tweet[], referenced: Tweet[] = [], opts: { failWith?: XAp
       referenced: new Map(referenced.map((t) => [t.id, t])),
       newestId: tweets.map((t) => t.id).sort().at(-1),
     }),
+    tweet: async (id) => opts.lookup?.find((t) => t.id === id),
     reply: async (text, inReplyTo) => {
       if (opts.failWith) throw opts.failWith;
       posted.push({ text, inReplyTo });
@@ -147,4 +148,12 @@ test("a rate-limit error carries X's reset time", async () => {
     new Response("{}", { status: 429, headers: { "x-rate-limit-reset": "1800000000" } })) as typeof fetch;
   const x = createXClient({ apiKey: "k", apiSecret: "s", accessToken: "t", accessSecret: "a" }, limited);
   await assert.rejects(x.me(), (err: unknown) => err instanceof XApiError && err.status === 429 && err.resetAt === 1_800_000_000_000);
+});
+
+test("follows a quote one step up when the parent post has no address", async () => {
+  const parent: Tweet = { id: "5", text: "still waiting on the team to fix the tag", referenced_tweets: [{ type: "quoted", id: "4" }] };
+  const launch: Tweet = { id: "4", text: `we're live: ${CA}` };
+  const { x, posted } = fakeX([mention("10", "@dyorowl is this safe", "u1", [{ type: "replied_to", id: "5" }])], [parent], { lookup: [launch] });
+  await runOnce(emptyState("2026-10-21"), cfg, { x, me: ME, now, investigate: async () => report });
+  assert.equal(posted.length, 1);
 });
