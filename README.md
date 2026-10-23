@@ -99,7 +99,7 @@ Cost safeguards, all set in `.env`:
 - No contract address, no reply. Chatter is never answered.
 - A daily reply cap (default 50) and a per-person daily cap (default 3).
 - A coin's case file is reused for 15 minutes, so a coin being shilled everywhere is only investigated once.
-- `BOT_TAG_THREAD` (on by default) keeps everyone in the thread tagged for more views. X's automation rules forbid unsolicited automated mentions, so set it to `false` to tag only the person who asked if the account gets warned or limited.
+- It only tags the person who asked, not every account in the thread.
 - It never replies to itself or to the same post twice, and on its very first run it skips old mentions instead of answering the backlog.
 - It stops, rather than retrying, if X says the keys are wrong, the app can't post, or the account is out of credits.
 - Every reply is numbered ("🦉 Case #42: $TICKER"), because X rejects identical posts.

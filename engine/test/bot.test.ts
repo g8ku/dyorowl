@@ -10,7 +10,7 @@ import { tweetLength } from "../src/render.js";
 const ME = { id: "1", username: "dyorowl" };
 const CA = DEMO_MINT;
 const now = () => new Date(DEMO_NOW);
-const cfg: BotConfig = { live: true, dailyReplyCap: 50, perUserDailyCap: 3, cacheMinutes: 15, skipBacklog: false, tagThread: false };
+const cfg: BotConfig = { live: true, dailyReplyCap: 50, perUserDailyCap: 3, cacheMinutes: 15, skipBacklog: false };
 const report = scoreEvidence(healthyCoin, new Date(DEMO_NOW));
 
 function fakeX(tweets: Tweet[], referenced: Tweet[] = [], opts: { failWith?: XApiError; lookup?: Tweet[] } = {}) {
@@ -158,7 +158,7 @@ test("follows a quote one step up when the parent post has no address", async ()
   assert.equal(posted.length, 1);
 });
 
-test("tags only the asker, or everyone in the thread when tagThread is on", async () => {
+test("only the person who asked gets tagged, not everyone in the thread", async () => {
   const m: Tweet = {
     ...mention("10", `@YokaiCapital @AxiomExchange @dyorowl is this safe ${CA}`, "asker"),
     entities: { mentions: [{ id: "yokai", username: "YokaiCapital" }, { id: "axiom", username: "AxiomExchange" }, { id: ME.id, username: "dyorowl" }] },
@@ -166,8 +166,4 @@ test("tags only the asker, or everyone in the thread when tagThread is on", asyn
   const { x, posted } = fakeX([m]);
   await runOnce(emptyState("2026-10-21"), cfg, { x, me: ME, now, investigate: async () => report });
   assert.deepEqual(posted[0]!.exclude, ["yokai", "axiom"]);
-
-  const all = fakeX([m]);
-  await runOnce(emptyState("2026-10-21"), { ...cfg, tagThread: true }, { x: all.x, me: ME, now, investigate: async () => report });
-  assert.deepEqual(all.posted[0]!.exclude, []);
 });

@@ -36,7 +36,6 @@ const cfg: BotConfig = {
   perUserDailyCap: num("BOT_PER_USER_DAILY_CAP", 3),
   cacheMinutes: num("BOT_CACHE_MINUTES", 15),
   skipBacklog: env("BOT_ANSWER_BACKLOG") !== "true",
-  tagThread: env("BOT_TAG_THREAD") !== "false",
 };
 const pollMs = num("BOT_POLL_SECONDS", 30) * 1000;
 const statePath = env("BOT_STATE_FILE") ?? ".bot-state.json";
@@ -57,8 +56,7 @@ async function main() {
   const me = await x.me();
   log(
     `🦉 @${me.username} ${cfg.live ? "is LIVE and will post replies" : "in DRY RUN (set BOT_LIVE=true to post)"}. ` +
-      `Caps: ${cfg.dailyReplyCap}/day, ${cfg.perUserDailyCap}/person/day. Cache: ${cfg.cacheMinutes}m. ` +
-      `Tags: ${cfg.tagThread ? "everyone in the thread" : "only the asker"}.`
+      `Caps: ${cfg.dailyReplyCap}/day, ${cfg.perUserDailyCap}/person/day. Cache: ${cfg.cacheMinutes}m.`
   );
 
   for (;;) {
