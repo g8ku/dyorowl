@@ -106,7 +106,7 @@ export async function runOnce(state: BotState, cfg: BotConfig, deps: BotDeps): P
     }
 
     try {
-      await deps.x.reply(reply, m.id);
+      await deps.x.reply(reply, m.id, othersInThread(m, deps.me.id));
     } catch (err) {
       if (err instanceof XApiError && err.isDuplicate) {
         // Same coin, same minute, same text: X won't post it again. Don't retry.
@@ -131,6 +131,16 @@ export async function runOnce(state: BotState, cfg: BotConfig, deps: BotDeps): P
   pruneCache(state, now().getTime(), cfg.cacheMinutes);
   deps.save?.(state);
   return { state, outcomes };
+}
+
+/**
+ * Everyone X would tag in the reply apart from the person who asked. Replying
+ * in a thread tags every account the post mentions; a new bot pinging
+ * projects nobody asked it about looks like spam.
+ */
+export function othersInThread(m: Tweet, selfId: string): string[] {
+  const ids = (m.entities?.mentions ?? []).map((x) => x.id).filter((id): id is string => Boolean(id));
+  return [...new Set(ids)].filter((id) => id !== m.author_id && id !== selfId);
 }
 
 /** Room kept free for the case number ("Case #123456: " vs "Case file: "). */

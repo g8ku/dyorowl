@@ -14,7 +14,7 @@ const cfg: BotConfig = { live: true, dailyReplyCap: 50, perUserDailyCap: 3, cach
 const report = scoreEvidence(healthyCoin, new Date(DEMO_NOW));
 
 function fakeX(tweets: Tweet[], referenced: Tweet[] = [], opts: { failWith?: XApiError; lookup?: Tweet[] } = {}) {
-  const posted: { text: string; inReplyTo: string }[] = [];
+  const posted: { text: string; inReplyTo: string; exclude?: string[] }[] = [];
   const x: XClient = {
     me: async () => ME,
     mentions: async (): Promise<MentionsPage> => ({
@@ -23,9 +23,9 @@ function fakeX(tweets: Tweet[], referenced: Tweet[] = [], opts: { failWith?: XAp
       newestId: tweets.map((t) => t.id).sort().at(-1),
     }),
     tweet: async (id) => opts.lookup?.find((t) => t.id === id),
-    reply: async (text, inReplyTo) => {
+    reply: async (text, inReplyTo, exclude) => {
       if (opts.failWith) throw opts.failWith;
-      posted.push({ text, inReplyTo });
+      posted.push({ text, inReplyTo, exclude });
       return { id: `r${posted.length}` };
     },
   };
@@ -156,4 +156,14 @@ test("follows a quote one step up when the parent post has no address", async ()
   const { x, posted } = fakeX([mention("10", "@dyorowl is this safe", "u1", [{ type: "replied_to", id: "5" }])], [parent], { lookup: [launch] });
   await runOnce(emptyState("2026-10-21"), cfg, { x, me: ME, now, investigate: async () => report });
   assert.equal(posted.length, 1);
+});
+
+test("only the person who asked gets tagged, not everyone in the thread", async () => {
+  const m: Tweet = {
+    ...mention("10", `@YokaiCapital @AxiomExchange @dyorowl is this safe ${CA}`, "asker"),
+    entities: { mentions: [{ id: "yokai", username: "YokaiCapital" }, { id: "axiom", username: "AxiomExchange" }, { id: ME.id, username: "dyorowl" }] },
+  };
+  const { x, posted } = fakeX([m]);
+  await runOnce(emptyState("2026-10-21"), cfg, { x, me: ME, now, investigate: async () => report });
+  assert.deepEqual(posted[0]!.exclude, ["yokai", "axiom"]);
 });

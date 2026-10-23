@@ -19,6 +19,7 @@ export interface Tweet {
   text: string;
   author_id?: string;
   referenced_tweets?: { type: "replied_to" | "quoted" | "retweeted"; id: string }[];
+  entities?: { mentions?: { id?: string; username: string }[] };
 }
 
 export interface MentionsPage {
@@ -32,7 +33,8 @@ export interface XClient {
   me(): Promise<{ id: string; username: string }>;
   mentions(userId: string, sinceId?: string): Promise<MentionsPage>;
   tweet(id: string): Promise<Tweet | undefined>;
-  reply(text: string, inReplyTo: string): Promise<{ id: string }>;
+  /** `exclude` are user ids X would otherwise tag automatically because they're in the thread. */
+  reply(text: string, inReplyTo: string, exclude?: string[]): Promise<{ id: string }>;
 }
 
 export class XApiError extends Error {
@@ -86,7 +88,7 @@ export function createXClient(creds: XCredentials, fetchImpl: typeof fetch = fet
         meta?: { newest_id?: string };
       }>("GET", `/users/${userId}/mentions`, {
         max_results: "100",
-        "tweet.fields": "author_id,referenced_tweets",
+        "tweet.fields": "author_id,referenced_tweets,entities",
         expansions: "referenced_tweets.id",
         ...(sinceId ? { since_id: sinceId } : {}),
       });
@@ -102,8 +104,9 @@ export function createXClient(creds: XCredentials, fetchImpl: typeof fetch = fet
       return r.data;
     },
 
-    async reply(text, inReplyTo) {
-      const r = await request<{ data: { id: string } }>("POST", "/tweets", {}, { text, reply: { in_reply_to_tweet_id: inReplyTo } });
+    async reply(text, inReplyTo, exclude = []) {
+      const reply = { in_reply_to_tweet_id: inReplyTo, ...(exclude.length ? { exclude_reply_user_ids: exclude } : {}) };
+      const r = await request<{ data: { id: string } }>("POST", "/tweets", {}, { text, reply });
       return r.data;
     },
   };

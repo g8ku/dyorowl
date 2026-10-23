@@ -29,7 +29,7 @@ cd engine
 npm install
 cp .env.example .env     # then paste your RPC URL into .env
 npm run demo             # three made-up sample cases, no network needed
-npm test                 # 51 tests
+npm test                 # 52 tests
 ```
 
 Investigate a real coin:
@@ -99,6 +99,7 @@ Cost safeguards, all set in `.env`:
 - No contract address, no reply. Chatter is never answered.
 - A daily reply cap (default 50) and a per-person daily cap (default 3).
 - A coin's case file is reused for 15 minutes, so a coin being shilled everywhere is only investigated once.
+- It only tags the person who asked, not every account in the thread.
 - It never replies to itself or to the same post twice, and on its very first run it skips old mentions instead of answering the backlog.
 - It stops, rather than retrying, if X says the keys are wrong, the app can't post, or the account is out of credits.
 - Every reply is numbered ("🦉 Case #42: $TICKER"), because X rejects identical posts.
